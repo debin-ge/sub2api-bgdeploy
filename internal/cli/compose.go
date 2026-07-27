@@ -58,6 +58,11 @@ func (a *app) appRunning(ctx context.Context, slug, slot string, port int, tag s
 	return err == nil && strings.TrimSpace(output) != ""
 }
 
+func (a *app) appExists(ctx context.Context, slug, slot string, port int, tag string) bool {
+	output, err := a.appCompose(ctx, false, slug, slot, port, tag, "ps", "-a", "-q", "app")
+	return err == nil && strings.TrimSpace(output) != ""
+}
+
 func portForSlot(portBase int, slot string) (int, error) {
 	switch slot {
 	case slotBlue:

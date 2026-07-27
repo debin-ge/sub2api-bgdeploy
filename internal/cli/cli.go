@@ -106,6 +106,21 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			slug = commandArgs[0]
 		}
 		return app.status(ctx, slug)
+	case "stop":
+		if len(commandArgs) != 1 {
+			return usageError("stop <slug>")
+		}
+		return app.stop(ctx, commandArgs[0])
+	case "start":
+		if len(commandArgs) != 1 {
+			return usageError("start <slug>")
+		}
+		return app.start(ctx, commandArgs[0])
+	case "restart":
+		if len(commandArgs) != 1 {
+			return usageError("restart <slug>")
+		}
+		return app.restart(ctx, commandArgs[0])
 	case "teardown":
 		if len(commandArgs) != 2 {
 			return usageError("teardown <slug> <blue|green>")

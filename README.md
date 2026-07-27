@@ -4,6 +4,7 @@
 [sub2api](https://github.com/Wei-Shaw/sub2api) 构建的单机、多站点蓝绿部署 CLI，
 可执行文件名为 `bgdeploy`。它负责管理 sub2api 的 PostgreSQL/Redis 数据层、
 blue/green 应用实例、健康门禁、Nginx 流量切换、排空回收和回滚。
+同时提供站点级 `stop`、`start`、`restart`，用于维护窗口和主机运维。
 
 本项目不是通用部署框架。内置 Compose 模板、环境变量校验、`/health` 身份校验、
 `APP_SLOT`、共享 `/app/data`、数据库迁移窗口及流式请求超时均针对 sub2api 的运行
@@ -383,6 +384,46 @@ sudo ./bgdeploy teardown api-staging green
 
 teardown 会再次读取 Nginx upstream，拒绝回收当前生效 slot。
 
+## 启动、停止和重启
+
+整站停止：
+
+```bash
+sudo ./bgdeploy stop api-staging
+```
+
+`stop` 会先取消 blue/green 的待回收任务，再依次停止非生效应用 slot、生效应用
+slot，最后停止 PostgreSQL/Redis。停止遵守 Compose 的 `stop_grace_period`，并保留：
+
+- 应用和数据层容器；
+- PostgreSQL、Redis 和 `/app/data` 持久化数据；
+- `STATE` 中的蓝绿发布历史；
+- Nginx upstream 的当前流量方向。
+
+停止期间 Nginx 配置仍然存在，但由于上游应用未运行，请求会返回上游不可用。需要
+自定义维护页时，应在外层负载均衡或 Nginx 中单独配置。
+
+恢复整站：
+
+```bash
+sudo ./bgdeploy start api-staging
+```
+
+`start` 会先启动 PostgreSQL/Redis 并等待其健康，然后只启动 Nginx 当前指向的
+生效 slot，最后执行与发布相同的 `/health` 健康和实例身份校验。非生效 slot 不会
+自动启动。该命令只恢复 `stop` 保留的已有应用容器；首次发布或容器已经被
+`teardown` 删除时应使用 `deploy`。若应用未通过门禁，工具会再次停止该应用 slot，
+数据层保持运行以便排查。
+
+原地重启：
+
+```bash
+sudo ./bgdeploy restart api-staging
+```
+
+`restart` 在同一个站点操作锁内依次执行完整停止和恢复，避免发布、回滚或其他
+生命周期操作插入停启过程。
+
 ## 命令
 
 ```text
@@ -393,6 +434,9 @@ init <slug>
 deploy <slug> [image-tag]
 rollback <slug>
 status [slug]
+stop <slug>
+start <slug>
+restart <slug>
 teardown <slug> <blue|green>
 version
 ```
@@ -413,8 +457,8 @@ routine releases, rollback, and troubleshooting:
 ./bgdeploy status api-staging
 ```
 
-输出会显示 Nginx 实际方向、STATE、两个 slot 的容器/健康状态和待回收任务。状态不
-一致时始终以 Nginx upstream 为准。
+输出会显示 Nginx 实际方向、STATE、PostgreSQL/Redis 数据层、两个 slot 的
+容器/健康状态和待回收任务。状态不一致时始终以 Nginx upstream 为准。
 
 ## 更新工具
 
@@ -437,4 +481,5 @@ make release
 
 测试使用假的 Docker/Nginx/systemd 命令和本地 HTTP 服务，覆盖运行配置优先级、
 内嵌资源渲染、依赖预检、初始化、首次发布、blue→green、快速及降级回滚、
-Nginx 校验失败还原和 teardown 安全闸。数据库迁移兼容性由 sub2api 版本负责。
+整站停止/恢复/重启、Nginx 校验失败还原和 teardown 安全闸。数据库迁移兼容性由
+sub2api 版本负责。

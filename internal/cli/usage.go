@@ -56,9 +56,23 @@ Commands:
       that container has been removed. Database migrations are not rolled back.
 
   status [slug]
-      Show the Nginx traffic target, STATE, blue and green containers, health
-      results, and pending teardown jobs for all sites or one site. Nginx
-      upstream is authoritative if states disagree.
+      Show the Nginx traffic target, STATE, data services, blue and green
+      containers, health results, and pending teardown jobs for all sites or
+      one site. Nginx upstream is authoritative if states disagree.
+
+  stop <slug>
+      Gracefully stop both application slots, then PostgreSQL and Redis.
+      Preserve containers, persistent data, STATE, and the Nginx upstream so
+      the site can be resumed without changing its blue-green history.
+
+  start <slug>
+      Start PostgreSQL and Redis, then resume only the application slot
+      currently selected by Nginx. This resumes an existing container; use
+      deploy if it was removed. Wait for health and identity validation.
+
+  restart <slug>
+      Gracefully stop the entire site and start it again. The same operation
+      lock is held throughout the stop/start sequence.
 
   teardown <slug> <blue|green>
       Manually remove a slot. The command reads the Nginx upstream again and
@@ -187,6 +201,16 @@ Routine blue-green release:
 
   The next release automatically performs the reverse green-to-blue switch.
 
+Site lifecycle:
+  sudo ./bgdeploy stop api-staging
+  sudo ./bgdeploy start api-staging
+  sudo ./bgdeploy restart api-staging
+
+  stop preserves containers, data, STATE, and the Nginx upstream. start
+  restores the data services first, then only the slot selected by Nginx.
+  During the stopped interval Nginx remains configured but returns an upstream
+  error because no application container is serving traffic.
+
 Rollback:
   sudo ./bgdeploy rollback api-staging
   ./bgdeploy status api-staging
@@ -209,6 +233,8 @@ Failure and safety behavior:
   - nginx -t or reload failure: restore the upstream and do not switch traffic.
   - Initial deployment failure: no usable container exists behind the
     upstream; fix the error and retry.
+  - start health or identity failure: stop the application slot again and keep
+    the data services running for diagnosis.
   - teardown refuses to remove the active slot.
   - Database migrations are not rolled back. Old and new releases must support
     the same database schema.

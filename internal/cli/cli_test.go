@@ -67,12 +67,26 @@ if [ "${1:-}" = compose ]; then
       exit 0
       ;;
     ps)
-      [ ! -f "$BG_TEST_STATE/running-$project" ] || printf 'cid-%s\n' "$project"
+      include_stopped=false
+      for value in "$@"; do [ "$value" != "-a" ] || include_stopped=true; done
+      if [ "$include_stopped" = true ]; then
+        [ ! -f "$BG_TEST_STATE/container-slot-$project" ] || printf 'cid-%s\n' "$project"
+      else
+        [ ! -f "$BG_TEST_STATE/running-$project" ] || printf 'cid-%s\n' "$project"
+      fi
       exit 0 ;;
+    start)
+      [ ! -f "$BG_TEST_STATE/container-slot-$project" ] || touch "$BG_TEST_STATE/running-$project"
+      exit 0
+      ;;
     down)
       rm -f "$BG_TEST_STATE/running-$project" \
         "$BG_TEST_STATE/container-slot-$project" \
         "$BG_TEST_STATE/container-image-$project"
+      exit 0
+      ;;
+    stop)
+      rm -f "$BG_TEST_STATE/running-$project"
       exit 0
       ;;
     logs) printf 'fake logs for %s\n' "$project"; exit 0 ;;
@@ -355,6 +369,9 @@ func TestHelpIncludesCompleteOperationsGuide(t *testing.T) {
 				"bgdeploy [global options] <command> [arguments]",
 				"bootstrap",
 				"deploy <slug> [image-tag]",
+				"stop <slug>",
+				"start <slug>",
+				"restart <slug>",
 				"teardown <slug> <blue|green>",
 				"sites.yaml",
 				"envs/<slug>.env",
@@ -779,6 +796,102 @@ func TestDeployRollbackAndSafetyGates(t *testing.T) {
 		t.Fatalf("fallback rollback: %v", err)
 	}
 	assertUpstreamPort(t, environment.app.upstreamPath("api-test"), portBase+1)
+}
+
+func TestStopStartAndRestartSiteLifecycle(t *testing.T) {
+	blueListener, greenListener, portBase := listenOnConsecutivePorts(t)
+	var blueBody atomic.Value
+	var greenBody atomic.Value
+	blueBody.Store(`{"status":"ok","version":"1.0.0","slot":"blue"}`)
+	greenBody.Store(`{"status":"ok","version":"1.1.0","slot":"green"}`)
+	serveHealth(t, blueListener, &blueBody)
+	serveHealth(t, greenListener, &greenBody)
+
+	environment := newTestEnvironment(t)
+	environment.writeSites(t, portBase)
+	environment.writeValidEnvironment(t, 0o600)
+	if err := environment.app.render(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := environment.app.initStack(context.Background(), "api-test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := environment.app.start(context.Background(), "api-test"); err == nil || !strings.Contains(err.Error(), "没有可恢复的应用容器") {
+		t.Fatalf("start before first deploy error = %v", err)
+	}
+	if err := environment.app.deploy(context.Background(), "api-test", "v1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate an inactive green container and pending drain timers. stop must
+	// stop both slots and cancel both timers while preserving STATE/upstream.
+	for _, path := range []string{
+		filepath.Join(environment.stateDir, "running-api-test-green"),
+		filepath.Join(environment.stateDir, "timer-"+drainUnit("api-test", slotBlue)),
+		filepath.Join(environment.stateDir, "timer-"+drainUnit("api-test", slotGreen)),
+	} {
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stateBefore, err := os.ReadFile(environment.app.statePath("api-test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstreamBefore, err := os.ReadFile(environment.app.upstreamPath("api-test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := environment.app.stop(context.Background(), "api-test"); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	for _, project := range []string{"api-test-blue", "api-test-green", "api-test-data"} {
+		if _, err := os.Stat(filepath.Join(environment.stateDir, "running-"+project)); !os.IsNotExist(err) {
+			t.Errorf("%s is still running after stop: %v", project, err)
+		}
+	}
+	for _, slot := range []string{slotBlue, slotGreen} {
+		if _, err := os.Stat(filepath.Join(environment.stateDir, "timer-"+drainUnit("api-test", slot))); !os.IsNotExist(err) {
+			t.Errorf("%s timer still exists after stop: %v", slot, err)
+		}
+	}
+	stateAfter, _ := os.ReadFile(environment.app.statePath("api-test"))
+	upstreamAfter, _ := os.ReadFile(environment.app.upstreamPath("api-test"))
+	if !bytes.Equal(stateAfter, stateBefore) {
+		t.Fatalf("stop changed STATE:\nbefore=%s\nafter=%s", stateBefore, stateAfter)
+	}
+	if !bytes.Equal(upstreamAfter, upstreamBefore) {
+		t.Fatalf("stop changed upstream:\nbefore=%s\nafter=%s", upstreamBefore, upstreamAfter)
+	}
+	environment.stdout.Reset()
+	if err := environment.app.status(context.Background(), "api-test"); err != nil {
+		t.Fatalf("status after stop: %v", err)
+	}
+	if !strings.Contains(environment.stdout.String(), "数据层(PostgreSQL/Redis): 容器[未运行]") {
+		t.Fatalf("status does not show stopped data layer:\n%s", environment.stdout)
+	}
+
+	if err := environment.app.start(context.Background(), "api-test"); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	for _, project := range []string{"api-test-data", "api-test-blue"} {
+		if _, err := os.Stat(filepath.Join(environment.stateDir, "running-"+project)); err != nil {
+			t.Errorf("%s was not started: %v", project, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(environment.stateDir, "running-api-test-green")); !os.IsNotExist(err) {
+		t.Fatalf("start resumed inactive green slot: %v", err)
+	}
+
+	if err := environment.app.restart(context.Background(), "api-test"); err != nil {
+		t.Fatalf("restart: %v", err)
+	}
+	for _, project := range []string{"api-test-data", "api-test-blue"} {
+		if _, err := os.Stat(filepath.Join(environment.stateDir, "running-"+project)); err != nil {
+			t.Errorf("%s was not running after restart: %v", project, err)
+		}
+	}
 }
 
 func listenOnConsecutivePorts(t *testing.T) (net.Listener, net.Listener, int) {

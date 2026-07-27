@@ -54,6 +54,8 @@ func (a *app) showStatus(ctx context.Context, site resolvedSite) error {
 		fmt.Fprintln(a.stdout, "  STATE 记录: 无")
 	}
 
+	fmt.Fprintf(a.stdout, "  数据层(PostgreSQL/Redis): 容器[%s]\n",
+		a.projectContainerStatus(ctx, site.Slug+"-data"))
 	for _, slot := range []string{slotBlue, slotGreen} {
 		port, _ := portForSlot(site.PortBase, slot)
 		marker := " "
@@ -74,16 +76,24 @@ func (a *app) showStatus(ctx context.Context, site resolvedSite) error {
 }
 
 func (a *app) containerStatus(ctx context.Context, slug, slot string) string {
+	return a.projectContainerStatus(ctx, slug+"-"+slot)
+}
+
+func (a *app) projectContainerStatus(ctx context.Context, project string) string {
 	output, err := a.runCapture(ctx, nil, "docker", "ps",
-		"--filter", "label=com.docker.compose.project="+slug+"-"+slot,
-		"--format", "{{.Status}} ({{.Image}})")
+		"--filter", "label=com.docker.compose.project="+project,
+		"--format", `{{.Label "com.docker.compose.service"}}={{.Status}} ({{.Image}})`)
 	if err != nil {
 		return "查询失败"
 	}
+	var statuses []string
 	for _, line := range strings.Split(output, "\n") {
 		if strings.TrimSpace(line) != "" {
-			return strings.TrimSpace(line)
+			statuses = append(statuses, strings.TrimSpace(line))
 		}
+	}
+	if len(statuses) > 0 {
+		return strings.Join(statuses, "; ")
 	}
 	return "未运行"
 }
