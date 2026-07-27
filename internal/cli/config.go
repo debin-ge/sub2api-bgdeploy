@@ -33,21 +33,21 @@ type siteDefaults struct {
 }
 
 type siteConfig struct {
-	Slug                  string    `yaml:"slug"`
-	Domain                string    `yaml:"domain"`
-	PortBase              int       `yaml:"port_base"`
-	ImageTag              string    `yaml:"image_tag"`
-	ImageRepo             string    `yaml:"image_repo"`
-	BindHost              string    `yaml:"bind_host"`
-	DrainSeconds          int       `yaml:"drain_seconds"`
-	HealthTimeoutSeconds  int       `yaml:"health_timeout_seconds"`
-	HealthIntervalSeconds int       `yaml:"health_interval_seconds"`
-	ClientMaxBodySize     string    `yaml:"client_max_body_size"`
-	ProxyConnectTimeout   string    `yaml:"proxy_connect_timeout"`
-	ProxySendTimeout      string    `yaml:"proxy_send_timeout"`
-	ProxyReadTimeout      string    `yaml:"proxy_read_timeout"`
-	TZ                    string    `yaml:"tz"`
-	TLS                   tlsConfig `yaml:"tls"`
+	Slug                  string     `yaml:"slug"`
+	Domains               domainList `yaml:"domain"`
+	PortBase              int        `yaml:"port_base"`
+	ImageTag              string     `yaml:"image_tag"`
+	ImageRepo             string     `yaml:"image_repo"`
+	BindHost              string     `yaml:"bind_host"`
+	DrainSeconds          int        `yaml:"drain_seconds"`
+	HealthTimeoutSeconds  int        `yaml:"health_timeout_seconds"`
+	HealthIntervalSeconds int        `yaml:"health_interval_seconds"`
+	ClientMaxBodySize     string     `yaml:"client_max_body_size"`
+	ProxyConnectTimeout   string     `yaml:"proxy_connect_timeout"`
+	ProxySendTimeout      string     `yaml:"proxy_send_timeout"`
+	ProxyReadTimeout      string     `yaml:"proxy_read_timeout"`
+	TZ                    string     `yaml:"tz"`
+	TLS                   tlsConfig  `yaml:"tls"`
 }
 
 type tlsConfig struct {
@@ -57,7 +57,7 @@ type tlsConfig struct {
 
 type resolvedSite struct {
 	Slug                  string
-	Domain                string
+	Domains               []string
 	PortBase              int
 	ImageTag              string
 	ImageRepo             string
@@ -72,6 +72,35 @@ type resolvedSite struct {
 	TZ                    string
 	TLSCert               string
 	TLSKey                string
+}
+
+type domainList []string
+
+func (domains *domainList) UnmarshalYAML(node *yaml.Node) error {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		if node.Tag == "!!null" || strings.TrimSpace(node.Value) == "" {
+			*domains = nil
+			return nil
+		}
+		if node.Tag != "!!str" {
+			return fmt.Errorf("domain 必须是域名字符串或域名列表")
+		}
+		*domains = domainList{strings.TrimSpace(node.Value)}
+		return nil
+	case yaml.SequenceNode:
+		values := make(domainList, 0, len(node.Content))
+		for _, item := range node.Content {
+			if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
+				return fmt.Errorf("domain 列表中的每一项都必须是域名字符串")
+			}
+			values = append(values, strings.TrimSpace(item.Value))
+		}
+		*domains = values
+		return nil
+	default:
+		return fmt.Errorf("domain 必须是域名字符串或域名列表")
+	}
 }
 
 var (
@@ -120,7 +149,7 @@ func (a *app) loadSites() ([]resolvedSite, error) {
 func resolveSite(defaults siteDefaults, site siteConfig) resolvedSite {
 	return resolvedSite{
 		Slug:                  site.Slug,
-		Domain:                site.Domain,
+		Domains:               append([]string(nil), site.Domains...),
 		PortBase:              site.PortBase,
 		ImageTag:              site.ImageTag,
 		ImageRepo:             firstString(site.ImageRepo, defaults.ImageRepo),
@@ -174,14 +203,19 @@ func validateSites(sites []resolvedSite) error {
 		}
 		seenSlugs[site.Slug] = struct{}{}
 
-		if !domainPattern.MatchString(site.Domain) {
-			return fmt.Errorf("%s 的 domain 非法: %q（只允许单个完整域名）", site.Slug, site.Domain)
+		if len(site.Domains) == 0 {
+			return fmt.Errorf("%s 缺少 domain", site.Slug)
 		}
-		domainKey := strings.ToLower(site.Domain)
-		if other, ok := seenDomains[domainKey]; ok {
-			return fmt.Errorf("域名重复: %s（%s 与 %s）", site.Domain, other, site.Slug)
+		for _, domain := range site.Domains {
+			if !domainPattern.MatchString(domain) {
+				return fmt.Errorf("%s 的 domain 非法: %q（必须是完整域名）", site.Slug, domain)
+			}
+			domainKey := strings.ToLower(domain)
+			if other, ok := seenDomains[domainKey]; ok {
+				return fmt.Errorf("域名重复: %s（%s 与 %s）", domain, other, site.Slug)
+			}
+			seenDomains[domainKey] = site.Slug
 		}
-		seenDomains[domainKey] = site.Slug
 
 		if site.PortBase < 1 || site.PortBase+9 > 65535 {
 			return fmt.Errorf("%s 的 port_base 非法: %d", site.Slug, site.PortBase)

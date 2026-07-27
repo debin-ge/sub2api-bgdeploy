@@ -31,7 +31,7 @@ func (a *app) status(ctx context.Context, requestedSlug string) error {
 }
 
 func (a *app) showStatus(ctx context.Context, site resolvedSite) error {
-	fmt.Fprintf(a.stdout, "━━━ %s (%s) ━━━\n", site.Slug, site.Domain)
+	fmt.Fprintf(a.stdout, "━━━ %s (%s) ━━━\n", site.Slug, strings.Join(site.Domains, ", "))
 	currentSlot := ""
 	currentPort, _, upstreamErr := a.readCurrentUpstream(site.Slug)
 	if upstreamErr == nil {

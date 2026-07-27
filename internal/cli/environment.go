@@ -16,11 +16,13 @@ var (
 	placeholderPattern = regexp.MustCompile(`(?i)(change[_-]?this|replace[_-]?with|change[_-]?me|your[_-]?(password|secret|key|email))`)
 	requiredEnvKeys    = []string{
 		"POSTGRES_PASSWORD",
-		"REDIS_PASSWORD",
 		"JWT_SECRET",
 		"TOTP_ENCRYPTION_KEY",
 		"ADMIN_EMAIL",
 		"ADMIN_PASSWORD",
+	}
+	optionalSecretEnvKeys = []string{
+		"REDIS_PASSWORD",
 	}
 )
 
@@ -104,6 +106,15 @@ func (a *app) validateSiteEnvironment(slug string) error {
 		}
 		if value == exampleValues[key] || placeholderPattern.MatchString(value) {
 			return fmt.Errorf("环境变量文件 %s 的 %s 仍是示例值，必须修改后才能部署", path, key)
+		}
+	}
+	for _, key := range optionalSecretEnvKeys {
+		value, exists := values[key]
+		if !exists || strings.TrimSpace(value) == "" {
+			continue
+		}
+		if value == exampleValues[key] || placeholderPattern.MatchString(value) {
+			return fmt.Errorf("环境变量文件 %s 的 %s 仍是示例值；请设置真实值或留空以禁用密码", path, key)
 		}
 	}
 	return nil

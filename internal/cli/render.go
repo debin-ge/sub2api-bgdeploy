@@ -114,7 +114,7 @@ func (a *app) renderSite(site resolvedSite, http2 http2Syntax) error {
 		return err
 	}
 	siteConfig, err := renderAsset("templates/nginx-site.conf.tmpl", map[string]string{
-		"DOMAIN":                site.Domain,
+		"SERVER_NAMES":          strings.Join(site.Domains, " "),
 		"SLUG":                  site.Slug,
 		"SLUG_US":               slugUnderscore(site.Slug),
 		"TLS_CERT":              site.TLSCert,

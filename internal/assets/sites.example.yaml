@@ -22,7 +22,11 @@ defaults:
 
 stacks:
   - slug: api-prod
-    domain: api.example.com
+    # domain 既可填写单个字符串，也可填写多个域名组成的列表。
+    # TLS 证书必须覆盖列表中的全部域名。
+    domain:
+      - api.example.com
+      - api-alt.example.com
     port_base: 18080 # blue=18080, green=18081
     image_tag: v1.4.2
     tls:

@@ -440,7 +440,7 @@ func TestWriteCommandsRequireRoot(t *testing.T) {
 	}
 }
 
-func TestEnvironmentValidationRejectsExamplesAndMissingKeys(t *testing.T) {
+func TestEnvironmentValidationAllowsEmptyRedisPassword(t *testing.T) {
 	environment := newTestEnvironment(t)
 	if err := os.MkdirAll(environment.app.envsDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -462,13 +462,40 @@ func TestEnvironmentValidationRejectsExamplesAndMissingKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = environment.app.validateSiteEnvironment("api-test")
-	if err == nil || !strings.Contains(err.Error(), "缺少必要参数: REDIS_PASSWORD") {
+	if err == nil || !strings.Contains(err.Error(), "缺少必要参数: JWT_SECRET") {
 		t.Fatalf("validation error = %v, want missing required key failure", err)
 	}
 
 	environment.writeValidEnvironment(t, 0o600)
+	validContent, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyRedisPassword := bytes.ReplaceAll(validContent,
+		[]byte("REDIS_PASSWORD=redis-test-secret\n"), []byte("REDIS_PASSWORD=\n"))
+	if err := os.WriteFile(path, emptyRedisPassword, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := environment.app.validateSiteEnvironment("api-test"); err != nil {
-		t.Fatalf("valid environment rejected: %v", err)
+		t.Fatalf("empty REDIS_PASSWORD rejected: %v", err)
+	}
+
+	missingRedisPassword := bytes.ReplaceAll(validContent,
+		[]byte("REDIS_PASSWORD=redis-test-secret\n"), nil)
+	if err := os.WriteFile(path, missingRedisPassword, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := environment.app.validateSiteEnvironment("api-test"); err != nil {
+		t.Fatalf("missing optional REDIS_PASSWORD rejected: %v", err)
+	}
+
+	placeholderRedisPassword := bytes.ReplaceAll(validContent,
+		[]byte("REDIS_PASSWORD=redis-test-secret\n"), []byte("REDIS_PASSWORD=change_this_redis_password\n"))
+	if err := os.WriteFile(path, placeholderRedisPassword, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := environment.app.validateSiteEnvironment("api-test"); err == nil || !strings.Contains(err.Error(), "REDIS_PASSWORD 仍是示例值") {
+		t.Fatalf("placeholder REDIS_PASSWORD error = %v", err)
 	}
 }
 
@@ -490,6 +517,92 @@ func TestRenderAndInitUseEmbeddedAssets(t *testing.T) {
 	for _, path := range expected {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("missing rendered file %s: %v", path, err)
+		}
+	}
+	appCompose, err := os.ReadFile(filepath.Join(environment.root, "stacks", "api-test", "compose.app.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Keep this contract aligned with sub2api/deploy/docker-compose.yml. The
+	// rendered drain timeout/TZ and the two blue-green identity controls are
+	// intentional bgdeploy differences.
+	expectedAppEnvironment := []string{
+		"AUTO_SETUP=true",
+		"SERVER_HOST=0.0.0.0",
+		"SERVER_PORT=8080",
+		"SERVER_MODE=${SERVER_MODE:-release}",
+		"SERVER_SHUTDOWN_TIMEOUT_SECONDS=60",
+		"ENABLE_SERVER_TIMING=${ENABLE_SERVER_TIMING:-false}",
+		"RUN_MODE=${RUN_MODE:-standard}",
+		"UPDATE_GITHUB_TOKEN=${UPDATE_GITHUB_TOKEN:-}",
+		"APP_SLOT=${SLOT:?SLOT is required}",
+		"GATEWAY_SCHEDULING_STARTUP_SLOT_CLEANUP_DISABLED=true",
+		"DATABASE_HOST=postgres",
+		"DATABASE_PORT=5432",
+		"DATABASE_USER=${POSTGRES_USER:-sub2api}",
+		"DATABASE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}",
+		"DATABASE_DBNAME=${POSTGRES_DB:-sub2api}",
+		"DATABASE_SSLMODE=disable",
+		"DATABASE_MAX_OPEN_CONNS=${DATABASE_MAX_OPEN_CONNS:-50}",
+		"DATABASE_MAX_IDLE_CONNS=${DATABASE_MAX_IDLE_CONNS:-10}",
+		"DATABASE_CONN_MAX_LIFETIME_MINUTES=${DATABASE_CONN_MAX_LIFETIME_MINUTES:-30}",
+		"DATABASE_CONN_MAX_IDLE_TIME_MINUTES=${DATABASE_CONN_MAX_IDLE_TIME_MINUTES:-5}",
+		"REDIS_HOST=redis",
+		"REDIS_PORT=6379",
+		"REDIS_PASSWORD=${REDIS_PASSWORD:-}",
+		"REDIS_DB=${REDIS_DB:-0}",
+		"REDIS_POOL_SIZE=${REDIS_POOL_SIZE:-1024}",
+		"REDIS_MIN_IDLE_CONNS=${REDIS_MIN_IDLE_CONNS:-10}",
+		"REDIS_ENABLE_TLS=${REDIS_ENABLE_TLS:-false}",
+		"ADMIN_EMAIL=${ADMIN_EMAIL:-admin@sub2api.local}",
+		"ADMIN_PASSWORD=${ADMIN_PASSWORD:-}",
+		"JWT_SECRET=${JWT_SECRET:-}",
+		"JWT_EXPIRE_HOUR=${JWT_EXPIRE_HOUR:-24}",
+		"SETUP_MIGRATION_TIMEOUT_SECONDS=${SETUP_MIGRATION_TIMEOUT_SECONDS:-0}",
+		"TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:-}",
+		"TZ=UTC",
+		"GEMINI_OAUTH_CLIENT_ID=${GEMINI_OAUTH_CLIENT_ID:-}",
+		"GEMINI_OAUTH_CLIENT_SECRET=${GEMINI_OAUTH_CLIENT_SECRET:-}",
+		"GEMINI_OAUTH_SCOPES=${GEMINI_OAUTH_SCOPES:-}",
+		"GEMINI_QUOTA_POLICY=${GEMINI_QUOTA_POLICY:-}",
+		"GEMINI_CLI_OAUTH_CLIENT_SECRET=${GEMINI_CLI_OAUTH_CLIENT_SECRET:-}",
+		"ANTIGRAVITY_OAUTH_CLIENT_SECRET=${ANTIGRAVITY_OAUTH_CLIENT_SECRET:-}",
+		"ANTIGRAVITY_USER_AGENT_VERSION=${ANTIGRAVITY_USER_AGENT_VERSION:-}",
+		"SECURITY_URL_ALLOWLIST_ENABLED=${SECURITY_URL_ALLOWLIST_ENABLED:-false}",
+		"SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=${SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP:-true}",
+		"SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=${SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS:-true}",
+		"SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS=${SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS:-}",
+		"UPDATE_PROXY_URL=${UPDATE_PROXY_URL:-}",
+		"GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT=${GATEWAY_OPENAI_RESPONSE_HEADER_TIMEOUT:-0}",
+		"GATEWAY_OPENAI_HTTP2_ENABLED=${GATEWAY_OPENAI_HTTP2_ENABLED:-true}",
+		"GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1=${GATEWAY_OPENAI_HTTP2_ALLOW_PROXY_FALLBACK_TO_HTTP1:-true}",
+		"GATEWAY_OPENAI_HTTP2_FALLBACK_ERROR_THRESHOLD=${GATEWAY_OPENAI_HTTP2_FALLBACK_ERROR_THRESHOLD:-2}",
+		"GATEWAY_OPENAI_HTTP2_FALLBACK_WINDOW_SECONDS=${GATEWAY_OPENAI_HTTP2_FALLBACK_WINDOW_SECONDS:-60}",
+		"GATEWAY_OPENAI_HTTP2_FALLBACK_TTL_SECONDS=${GATEWAY_OPENAI_HTTP2_FALLBACK_TTL_SECONDS:-600}",
+		"GATEWAY_IMAGE_STREAM_DATA_INTERVAL_TIMEOUT=${GATEWAY_IMAGE_STREAM_DATA_INTERVAL_TIMEOUT:-900}",
+		"GATEWAY_IMAGE_STREAM_KEEPALIVE_INTERVAL=${GATEWAY_IMAGE_STREAM_KEEPALIVE_INTERVAL:-10}",
+		"GATEWAY_IMAGE_CONCURRENCY_ENABLED=${GATEWAY_IMAGE_CONCURRENCY_ENABLED:-false}",
+		"GATEWAY_IMAGE_CONCURRENCY_MAX_CONCURRENT_REQUESTS=${GATEWAY_IMAGE_CONCURRENCY_MAX_CONCURRENT_REQUESTS:-0}",
+		"GATEWAY_IMAGE_CONCURRENCY_OVERFLOW_MODE=${GATEWAY_IMAGE_CONCURRENCY_OVERFLOW_MODE:-reject}",
+		"GATEWAY_IMAGE_CONCURRENCY_WAIT_TIMEOUT_SECONDS=${GATEWAY_IMAGE_CONCURRENCY_WAIT_TIMEOUT_SECONDS:-30}",
+		"GATEWAY_IMAGE_CONCURRENCY_MAX_WAITING_REQUESTS=${GATEWAY_IMAGE_CONCURRENCY_MAX_WAITING_REQUESTS:-100}",
+	}
+	for _, entry := range expectedAppEnvironment {
+		if !bytes.Contains(appCompose, []byte("      - "+entry+"\n")) {
+			t.Errorf("rendered compose.app.yml is missing environment entry %q", entry)
+		}
+	}
+	dataCompose, err := os.ReadFile(filepath.Join(environment.root, "stacks", "api-test", "compose.data.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range []string{
+		"POSTGRES_USER=${POSTGRES_USER:-sub2api}",
+		"POSTGRES_DB=${POSTGRES_DB:-sub2api}",
+		"pg_isready -U ${POSTGRES_USER:-sub2api} -d ${POSTGRES_DB:-sub2api}",
+	} {
+		if !bytes.Contains(dataCompose, []byte(entry)) {
+			t.Errorf("rendered compose.data.yml is missing production-aligned entry %q", entry)
 		}
 	}
 
@@ -534,6 +647,57 @@ func TestRenderAndInitUseEmbeddedAssets(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(environment.stateDir, "network-api-test-net")); err != nil {
 		t.Fatalf("network was not created: %v", err)
+	}
+}
+
+func TestSitesSupportMultipleDomains(t *testing.T) {
+	environment := newTestEnvironment(t)
+	environment.writeSites(t, 28084)
+	path := filepath.Join(environment.root, "sites.yaml")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content = bytes.ReplaceAll(content,
+		[]byte("    domain: test.example.com\n"),
+		[]byte("    domain:\n      - test.example.com\n      - alias.example.com\n"))
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sites, err := environment.app.loadSites()
+	if err != nil {
+		t.Fatalf("load multi-domain sites: %v", err)
+	}
+	if len(sites) != 1 || strings.Join(sites[0].Domains, " ") != "test.example.com alias.example.com" {
+		t.Fatalf("resolved domains = %+v", sites)
+	}
+	if err := environment.app.render(context.Background()); err != nil {
+		t.Fatalf("render multi-domain site: %v", err)
+	}
+	nginxSite, err := os.ReadFile(filepath.Join(environment.nginxDir, "servers", "api-test.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverName := "server_name test.example.com alias.example.com;"
+	if bytes.Count(nginxSite, []byte(serverName)) != 2 {
+		t.Fatalf("rendered nginx site does not contain both domain aliases twice:\n%s", nginxSite)
+	}
+
+	duplicate := fmt.Sprintf(`
+  - slug: api-duplicate
+    domain: ALIAS.example.com
+    port_base: 28104
+    image_tag: v1.0.0
+    tls:
+      cert: %s
+      key: %s
+`, environment.certFile, environment.keyFile)
+	if err := os.WriteFile(path, append(content, duplicate...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := environment.app.loadSites(); err == nil || !strings.Contains(err.Error(), "域名重复") {
+		t.Fatalf("duplicate domain error = %v", err)
 	}
 }
 

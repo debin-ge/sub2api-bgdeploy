@@ -265,7 +265,9 @@ defaults:
 
 stacks:
   - slug: api-staging
-    domain: staging.example.com
+    domain:
+      - staging.example.com
+      - staging-alt.example.com
     port_base: 18080
     image_tag: v1.4.2
     tls:
@@ -278,7 +280,7 @@ stacks:
 | 参数 | 必填 | 说明 |
 |---|---:|---|
 | `slug` | 是 | 站点标识，仅允许小写字母、数字和连字符 |
-| `domain` | 是 | 单个完整域名，用于 Nginx `server_name` |
+| `domain` | 是 | 单个完整域名字符串或域名列表，用于 Nginx `server_name`；TLS 证书必须覆盖全部域名 |
 | `port_base` | 是 | blue 使用该端口，green 使用 `port_base+1`；每站点预留 10 个端口 |
 | `image_repo` | 是 | sub2api 镜像仓库，可放在 defaults 或 stack 中 |
 | `image_tag` | 否 | deploy 未传 tag 时使用 |
@@ -302,13 +304,28 @@ sudo chmod 600 envs/api-staging.env
 sudo vim envs/api-staging.env
 ```
 
+生成的 `compose.app.yml` 会显式声明原项目
+`sub2api/deploy/docker-compose.yml` 中的生产环境参数及默认值，包括数据库连接池、
+Redis、OAuth、安全白名单、更新代理和网关并发配置。蓝绿部署仅保留以下必要差异：
+
+- `SERVER_SHUTDOWN_TIMEOUT_SECONDS` 固定使用站点的 `drain_seconds`；
+- `TZ` 使用 `sites.yaml` 中解析后的站点时区；
+- 额外注入 `APP_SLOT` 和
+  `GATEWAY_SCHEDULING_STARTUP_SLOT_CLEANUP_DISABLED=true`；
+- 应用通过 `env_file` 继续接收 Sub2API 支持但上游 Compose 尚未显式列出的扩展参数。
+
+`compose.data.yml` 的 PostgreSQL 默认用户和数据库与原项目一致，均为 `sub2api`。
+已有 `envs/<slug>.env` 不会被 `bootstrap` 或 `render` 覆盖；未显式配置的新参数会使用
+Compose 中与原项目相同的默认值。
+
 `init` 和每次 `deploy` 都会在改变容器状态前检查：
 
 - `envs/<slug>.env` 存在且是普通文件，不接受目录或软链接；
 - 文件权限严格为 `0600`；
-- `POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`JWT_SECRET`、
-  `TOTP_ENCRYPTION_KEY`、`ADMIN_EMAIL`、`ADMIN_PASSWORD` 全部存在且非空；
-- 上述参数已经修改，不得继续使用 `env.example` 中的示例值；
+- `POSTGRES_PASSWORD`、`JWT_SECRET`、`TOTP_ENCRYPTION_KEY`、`ADMIN_EMAIL`、
+  `ADMIN_PASSWORD` 全部存在且非空；
+- `REDIS_PASSWORD` 可以省略或留空；留空时 Redis 不启用密码认证；
+- 非空密码和密钥不得继续使用 `env.example` 中的示例值；
 - stack 内的 `.env` 软链接指向当前部署根目录下正确的站点环境文件。
 
 任一检查失败都会中断并显示具体文件、参数或修复命令。`init` 检查通过后会在生成的

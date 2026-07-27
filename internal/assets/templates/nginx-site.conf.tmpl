@@ -1,9 +1,9 @@
-# ${DOMAIN} —— 由 ./bgdeploy render 生成，请勿手工编辑
+# ${SERVER_NAMES} —— 由 ./bgdeploy render 生成，请勿手工编辑
 
 server {
     listen 80;
     listen [::]:80;
-    server_name ${DOMAIN};
+    server_name ${SERVER_NAMES};
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
@@ -15,7 +15,7 @@ server {
 server {
     listen 443 ssl${HTTP2_LISTEN_SUFFIX};
     listen [::]:443 ssl${HTTP2_LISTEN_SUFFIX};
-${HTTP2_DIRECTIVE}    server_name ${DOMAIN};
+${HTTP2_DIRECTIVE}    server_name ${SERVER_NAMES};
 
     ssl_certificate     ${TLS_CERT};
     ssl_certificate_key ${TLS_KEY};

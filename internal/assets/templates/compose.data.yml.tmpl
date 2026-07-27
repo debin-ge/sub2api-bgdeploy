@@ -25,9 +25,9 @@ services:
       # postgres:18-alpine 默认 PGDATA 不在挂载卷内，必须显式指定，
       # 否则 down/up 后触发 initdb 重新初始化导致数据丢失。
       - PGDATA=/var/lib/postgresql/data
-      - POSTGRES_USER=${POSTGRES_USER:-app}
+      - POSTGRES_USER=${POSTGRES_USER:-sub2api}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      - POSTGRES_DB=${POSTGRES_DB:-app}
+      - POSTGRES_DB=${POSTGRES_DB:-sub2api}
       - TZ=${TZ}
     networks:
       - stack
@@ -35,7 +35,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}",
+          "pg_isready -U ${POSTGRES_USER:-sub2api} -d ${POSTGRES_DB:-sub2api}",
         ]
       interval: 10s
       timeout: 5s

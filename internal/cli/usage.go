@@ -138,7 +138,9 @@ Minimal sites.yaml example:
 
   stacks:
     - slug: api-staging
-      domain: api.example.com
+      domain:
+        - api.example.com
+        - api-alt.example.com
       port_base: 18080
       image_tag: 1.6.8
       tls:
@@ -157,11 +159,13 @@ Site environment file:
 
 Required values that must not retain example placeholders:
   POSTGRES_PASSWORD
-  REDIS_PASSWORD
   JWT_SECRET
   TOTP_ENCRYPTION_KEY
   ADMIN_EMAIL
   ADMIN_PASSWORD
+
+Optional:
+  REDIS_PASSWORD may be empty or omitted to run Redis without authentication.
 
 One-time Nginx integration:
   Add this to the main context of nginx.conf:
