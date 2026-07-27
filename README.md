@@ -53,12 +53,45 @@ make release               # Linux amd64 + arm64
 产物：
 
 ```text
-dist/bgdeploy
-dist/bgdeploy-linux-amd64
-dist/bgdeploy-linux-arm64
+dist/sub2api-bgdeploy
+dist/sub2api-bgdeploy-linux-amd64
+dist/sub2api-bgdeploy-linux-arm64
 ```
 
 构建使用 `-trimpath` 和 `CGO_ENABLED=0`，Linux 产物为静态二进制，服务器无需安装 Go。
+
+### 使用 GitHub Actions 发布
+
+仓库中的 `Build and release` 工作流支持两种运行方式：
+
+- 在 GitHub Actions 页面手动运行：构建 Linux amd64 和 arm64 二进制，构建结果可在
+  本次工作流的 Artifacts 中下载，保留 14 天；
+- 推送 `v` 开头的 Git 标签：构建并自动创建同名 GitHub Release，同时上传两个架构
+  的压缩包和 `checksums.txt`。
+
+例如发布 `v1.0.0`：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Release 产物：
+
+```text
+sub2api-bgdeploy-linux-amd64.tar.gz
+sub2api-bgdeploy-linux-arm64.tar.gz
+checksums.txt
+```
+
+每个压缩包内的可执行文件都名为 `sub2api-bgdeploy`。下载后可校验并安装为日常使用的
+`bgdeploy` 命令：
+
+```bash
+sha256sum --ignore-missing -c checksums.txt
+tar -xzf sub2api-bgdeploy-linux-amd64.tar.gz
+sudo install -m 755 sub2api-bgdeploy /srv/sub2api/bgdeploy
+```
 
 ## 项目结构
 
@@ -82,7 +115,7 @@ dist/bgdeploy-linux-arm64
 
 ```bash
 sudo mkdir -p /srv/sub2api
-sudo cp dist/bgdeploy-linux-amd64 /srv/sub2api/bgdeploy
+sudo cp dist/sub2api-bgdeploy-linux-amd64 /srv/sub2api/bgdeploy
 sudo chmod 755 /srv/sub2api/bgdeploy
 cd /srv/sub2api
 
@@ -388,7 +421,7 @@ routine releases, rollback, and troubleshooting:
 只需原子替换单个文件，配置和运行数据不变：
 
 ```bash
-sudo cp bgdeploy-linux-amd64 /srv/sub2api/bgdeploy.new
+sudo cp sub2api-bgdeploy /srv/sub2api/bgdeploy.new
 sudo chmod 755 /srv/sub2api/bgdeploy.new
 /srv/sub2api/bgdeploy.new version
 sudo mv /srv/sub2api/bgdeploy.new /srv/sub2api/bgdeploy
