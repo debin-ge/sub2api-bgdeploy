@@ -37,7 +37,7 @@ ${HTTP2_DIRECTIVE}    server_name ${DOMAIN};
 
     location / {
         proxy_pass http://${SLUG_US};
-        include ${NGINX_SNIPPET_DIR}/blue-green-proxy.conf;
+        include ${NGINX_SNIPPET_DIR}/proxy.conf;
         # 必须 ≥ 应用侧流间隔超时（GATEWAY_IMAGE_STREAM_DATA_INTERVAL_TIMEOUT，默认 900s）
         proxy_connect_timeout ${PROXY_CONNECT_TIMEOUT};
         proxy_send_timeout ${PROXY_SEND_TIMEOUT};

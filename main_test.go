@@ -458,7 +458,7 @@ func TestRenderAndInitUseEmbeddedAssets(t *testing.T) {
 		filepath.Join(environment.nginxDir, "http.conf"),
 		filepath.Join(environment.nginxDir, "servers", "api-test.conf"),
 		filepath.Join(environment.nginxDir, "upstreams", "api-test.conf"),
-		filepath.Join(environment.snippetDir, "blue-green-proxy.conf"),
+		filepath.Join(environment.snippetDir, "proxy.conf"),
 	}
 	for _, path := range expected {
 		if _, err := os.Stat(path); err != nil {

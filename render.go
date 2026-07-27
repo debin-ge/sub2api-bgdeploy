@@ -68,11 +68,11 @@ func (a *app) render(ctx context.Context) error {
 		}
 	}
 
-	snippet, err := readAsset("snippets/blue-green-proxy.conf")
+	snippet, err := readAsset("snippets/proxy.conf")
 	if err != nil {
 		return err
 	}
-	snippetPath := filepath.Join(a.nginxSnippetDir, "blue-green-proxy.conf")
+	snippetPath := filepath.Join(a.nginxSnippetDir, "proxy.conf")
 	if existing, readErr := os.ReadFile(snippetPath); readErr == nil && !bytes.Equal(existing, snippet) {
 		a.warn("覆盖已漂移的 %s（以内置版本为准）", snippetPath)
 	}
