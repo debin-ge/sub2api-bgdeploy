@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 
 type app struct {
 	root            string
-	registryFile    string
+	sitesFile       string
 	envsDir         string
 	stacksDir       string
 	nginxDir        string
@@ -67,7 +67,7 @@ func newAppWithConfig(configFile, root, nginxDir, nginxSnippetDir string, stdout
 
 	return &app{
 		root:            filepath.Clean(root),
-		registryFile:    filepath.Join(root, "registry", "sites.yaml"),
+		sitesFile:       filepath.Join(root, "sites.yaml"),
 		envsDir:         filepath.Join(root, "envs"),
 		stacksDir:       filepath.Join(root, "stacks"),
 		nginxDir:        filepath.Clean(nginxDir),

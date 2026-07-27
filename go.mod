@@ -1,4 +1,4 @@
-module blue-green-deploy
+module github.com/debin-ge/sub2api-bgdeploy
 
 go 1.22
 

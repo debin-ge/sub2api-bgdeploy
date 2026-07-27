@@ -1,13 +1,22 @@
-# 通用蓝绿部署 CLI
+# sub2api 蓝绿部署 CLI
 
-`bgdeploy` 是一个原生 Go 单文件部署工具。YAML 解析、Compose/Nginx 模板、proxy
-snippet 和 HTTP 健康探测均已编译进二进制。服务器不需要复制源码、模板或脚本，
-也不依赖 Bash、curl、jq、yq、Python/PyYAML。
+`sub2api-bgdeploy` 是专门为
+[sub2api](https://github.com/Wei-Shaw/sub2api) 构建的单机、多站点蓝绿部署 CLI，
+可执行文件名为 `bgdeploy`。它负责管理 sub2api 的 PostgreSQL/Redis 数据层、
+blue/green 应用实例、健康门禁、Nginx 流量切换、排空回收和回滚。
+
+本项目不是通用部署框架。内置 Compose 模板、环境变量校验、`/health` 身份校验、
+`APP_SLOT`、共享 `/app/data`、数据库迁移窗口及流式请求超时均针对 sub2api 的运行
+约定设计。
+
+`bgdeploy` 使用原生 Go 实现。YAML 解析、Compose/Nginx 模板、proxy snippet 和
+HTTP 健康探测均已编译进二进制。服务器不需要复制源码、模板或脚本，也不依赖
+Bash、curl、jq、yq、Python/PyYAML。
 
 除状态查询外，所有写操作必须使用 root 权限，并直接在部署目录执行：
 
 ```bash
-cd /srv/blue-green
+cd /srv/sub2api
 sudo ./bgdeploy <command>
 ```
 
@@ -51,15 +60,31 @@ dist/bgdeploy-linux-arm64
 
 构建使用 `-trimpath` 和 `CGO_ENABLED=0`，Linux 产物为静态二进制，服务器无需安装 Go。
 
+## 项目结构
+
+```text
+.
+├── cmd/
+│   └── bgdeploy/          # 可执行文件入口
+├── internal/
+│   ├── cli/               # 命令解析与 sub2api 蓝绿部署编排
+│   └── assets/            # 编译进二进制的 Compose/Nginx 模板和示例配置
+├── Makefile
+├── go.mod
+└── README.md
+```
+
+运行时示例配置不再散落在源码根目录；执行 `bgdeploy bootstrap` 时会从内嵌资源生成。
+
 ## 一次性安装
 
 以 Linux amd64 为例：
 
 ```bash
-sudo mkdir -p /srv/blue-green
-sudo cp dist/bgdeploy-linux-amd64 /srv/blue-green/bgdeploy
-sudo chmod 755 /srv/blue-green/bgdeploy
-cd /srv/blue-green
+sudo mkdir -p /srv/sub2api
+sudo cp dist/bgdeploy-linux-amd64 /srv/sub2api/bgdeploy
+sudo chmod 755 /srv/sub2api/bgdeploy
+cd /srv/sub2api
 
 sudo ./bgdeploy bootstrap
 ```
@@ -67,12 +92,11 @@ sudo ./bgdeploy bootstrap
 `bootstrap` 不覆盖已有文件，会创建：
 
 ```text
-/srv/blue-green/
+/srv/sub2api/
 ├── bgdeploy
 ├── runtime.yaml
 ├── env.example
-├── registry/
-│   └── sites.yaml
+├── sites.yaml
 ├── envs/
 │   └── <slug>.env
 └── stacks/
@@ -81,12 +105,19 @@ sudo ./bgdeploy bootstrap
 正常情况下，日常只需要编辑：
 
 ```text
-registry/sites.yaml
+sites.yaml
 envs/<slug>.env
 ```
 
 `runtime.yaml` 只保存主机级路径，通常在首次安装时确认一次即可。`stacks/`、Compose
 文件、Nginx 配置、STATE 和排空 PID 均由工具维护，不应手工修改。
+
+从使用 `registry/sites.yaml` 的旧版本升级时，先迁移清单：
+
+```bash
+sudo mv registry/sites.yaml sites.yaml
+sudo rmdir registry
+```
 
 ## 可执行文件运行配置
 
@@ -96,7 +127,7 @@ envs/<slug>.env
 完整配置：
 
 ```yaml
-root: /srv/blue-green
+root: /srv/sub2api
 nginx_dir: /etc/nginx/sites
 nginx_snippet_dir: /etc/nginx/sites/snippets
 ```
@@ -130,12 +161,12 @@ nginx_snippet_dir: /etc/nginx/sites/snippets
 示例：
 
 ```bash
-sudo BGDEPLOY_ROOT=/srv/blue-green \
+sudo BGDEPLOY_ROOT=/srv/sub2api \
   BGDEPLOY_NGINX_DIR=/etc/nginx/sites \
   ./bgdeploy render
 
 sudo ./bgdeploy \
-  --config /etc/blue-green/runtime.yaml \
+  --config /etc/sub2api-bgdeploy/runtime.yaml \
   render
 ```
 
@@ -183,11 +214,11 @@ sudo nginx -t
 
 ## 站点配置
 
-`registry/sites.yaml` 是非密钥站点配置的唯一真相源：
+`sites.yaml` 是非密钥站点配置的唯一真相源：
 
 ```yaml
 defaults:
-  image_repo: registry.example.com/application
+  image_repo: weishaw/sub2api
   bind_host: 127.0.0.1
   drain_seconds: 960
   health_timeout_seconds: 300
@@ -215,7 +246,7 @@ stacks:
 | `slug` | 是 | 站点标识，仅允许小写字母、数字和连字符 |
 | `domain` | 是 | 单个完整域名，用于 Nginx `server_name` |
 | `port_base` | 是 | blue 使用该端口，green 使用 `port_base+1`；每站点预留 10 个端口 |
-| `image_repo` | 是 | 应用镜像仓库，可放在 defaults 或 stack 中 |
+| `image_repo` | 是 | sub2api 镜像仓库，可放在 defaults 或 stack 中 |
 | `image_tag` | 否 | deploy 未传 tag 时使用 |
 | `bind_host` | 否 | 宿主机监听 IPv4 地址，默认 `127.0.0.1` |
 | `drain_seconds` | 否 | 旧实例排空时间，也用于应用优雅关闭 |
@@ -229,7 +260,7 @@ stacks:
 `render` 会在写文件前检查未知字段、slug/域名重复、端口区间重叠、端口范围、镜像
 参数和 TLS 文件。已存在的 upstream 不会被 render 覆盖，当前流量方向始终以它为准。
 
-每个站点的应用环境变量：
+每个 sub2api 站点的环境变量：
 
 ```bash
 sudo cp env.example envs/api-staging.env
@@ -260,7 +291,7 @@ sudo ./bgdeploy init api-staging
 ## 首次部署
 
 ```bash
-cd /srv/blue-green
+cd /srv/sub2api
 
 sudo ./bgdeploy render
 sudo ./bgdeploy init api-staging
@@ -287,7 +318,7 @@ sudo ./bgdeploy deploy api-staging v1.4.3
 1. 从 Nginx upstream 读取当前 slot；
 2. 对同一 stack 加操作锁，并清理已退出进程留下的死锁；
 3. 确认数据层健康；
-4. 拉起另一 slot，并由应用执行数据库迁移；
+4. 拉起另一 slot，并由 sub2api 执行数据库迁移；
 5. 使用内置 HTTP 客户端轮询 `/health` 并要求 `status=ok`；
 6. 校验响应中的 `slot` 和 `version`；对于尚未返回这两个字段的旧版镜像，自动通过
    Docker 元数据复核容器的 `APP_SLOT` 和完整镜像标签；
@@ -297,7 +328,7 @@ sudo ./bgdeploy deploy api-staging v1.4.3
 健康门禁或身份校验失败会输出新容器日志、回收新 slot，并保持 upstream 不变。
 `nginx -t` 或 reload 失败会还原 upstream 备份，不切换线上流量。
 
-新版本应用的 `/health` 固定返回 `status`、`version`、`slot`，并设置
+新版本 sub2api 的 `/health` 固定返回 `status`、`version`、`slot`，并设置
 `Cache-Control: no-store`。蓝绿环境的 `APP_SLOT` 仅允许 `blue` 或 `green`；非法值
 返回 HTTP 503，避免配置错误的实例进入流量。
 
@@ -357,10 +388,10 @@ routine releases, rollback, and troubleshooting:
 只需原子替换单个文件，配置和运行数据不变：
 
 ```bash
-sudo cp bgdeploy-linux-amd64 /srv/blue-green/bgdeploy.new
-sudo chmod 755 /srv/blue-green/bgdeploy.new
-/srv/blue-green/bgdeploy.new version
-sudo mv /srv/blue-green/bgdeploy.new /srv/blue-green/bgdeploy
+sudo cp bgdeploy-linux-amd64 /srv/sub2api/bgdeploy.new
+sudo chmod 755 /srv/sub2api/bgdeploy.new
+/srv/sub2api/bgdeploy.new version
+sudo mv /srv/sub2api/bgdeploy.new /srv/sub2api/bgdeploy
 ```
 
 ## 开发测试
@@ -373,4 +404,4 @@ make release
 
 测试使用假的 Docker/Nginx/systemd 命令和本地 HTTP 服务，覆盖运行配置优先级、
 内嵌资源渲染、依赖预检、初始化、首次发布、blue→green、快速及降级回滚、
-Nginx 校验失败还原和 teardown 安全闸。数据库迁移兼容性由被部署应用负责。
+Nginx 校验失败还原和 teardown 安全闸。数据库迁移兼容性由 sub2api 版本负责。

@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"bytes"
@@ -85,22 +85,22 @@ var (
 )
 
 func (a *app) loadSites() ([]resolvedSite, error) {
-	content, err := os.ReadFile(a.registryFile)
+	content, err := os.ReadFile(a.sitesFile)
 	if err != nil {
-		return nil, fmt.Errorf("读取清单 %s: %w", a.registryFile, err)
+		return nil, fmt.Errorf("读取清单 %s: %w", a.sitesFile, err)
 	}
 	var config sitesConfig
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&config); err != nil {
-		return nil, fmt.Errorf("解析清单 %s: %w", a.registryFile, err)
+		return nil, fmt.Errorf("解析清单 %s: %w", a.sitesFile, err)
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		if err == nil {
-			return nil, fmt.Errorf("解析清单 %s: 只允许一个 YAML 文档", a.registryFile)
+			return nil, fmt.Errorf("解析清单 %s: 只允许一个 YAML 文档", a.sitesFile)
 		}
-		return nil, fmt.Errorf("解析清单 %s: %w", a.registryFile, err)
+		return nil, fmt.Errorf("解析清单 %s: %w", a.sitesFile, err)
 	}
 	if len(config.Stacks) == 0 {
 		return nil, fmt.Errorf("清单中没有任何 stack")

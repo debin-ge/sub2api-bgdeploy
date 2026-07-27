@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"bytes"
@@ -40,7 +40,7 @@ func (a *app) render(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	a.log("清单校验通过: %s", a.registryFile)
+	a.log("清单校验通过: %s", a.sitesFile)
 	http2 := a.detectHTTP2Syntax(ctx)
 
 	for _, dir := range []string{a.stacksDir, a.nginxDir, a.nginxUpstreams, a.nginxSites, a.nginxSnippetDir} {

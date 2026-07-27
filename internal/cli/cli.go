@@ -1,4 +1,6 @@
-package main
+// Package cli implements the bgdeploy command for sub2api blue-green
+// deployments.
+package cli
 
 import (
 	"context"
@@ -11,17 +13,11 @@ import (
 	"time"
 )
 
-// Version is injected by -ldflags "-X main.Version=...".
+// Version is injected at build time with -ldflags.
 var Version = "dev"
 
-func main() {
-	if err := runCLI(context.Background(), os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+// Run parses command-line arguments and executes a bgdeploy command.
+func Run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("bgdeploy", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	configFile := fs.String("config", "", "主机级运行配置文件（默认当前目录/runtime.yaml）")

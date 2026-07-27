@@ -1,4 +1,4 @@
-# 多站点蓝绿部署清单——所有站点配置的单一真相源。
+# sub2api 多站点蓝绿部署清单——所有站点配置的单一真相源。
 # 在目标部署目录执行 bootstrap；该目录由执行时的 pwd 决定。
 #
 # 端口分配规则（FR-5.6）：每个 stack 占用 port_base ~ port_base+9 共 10 个端口，
@@ -9,7 +9,7 @@
 # 一律不进本文件，放在 envs/<slug>.env（chmod 600）。
 
 defaults:
-  image_repo: registry.example.com/application
+  image_repo: weishaw/sub2api
   bind_host: 127.0.0.1 # 应用端口只绑回环，禁止绕过 nginx 直连
   drain_seconds: 960 # 900（流上限）+ 60（余量）；与应用优雅关闭窗口绑定
   health_timeout_seconds: 300 # 健康门禁总超时，需覆盖 DB 迁移时间（上限 10 分钟）

@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"errors"
@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/debin-ge/sub2api-bgdeploy/internal/assets"
 )
 
 func ensureDir(path string, mode fs.FileMode) error {
@@ -63,7 +65,7 @@ func writeIfMissing(path string, content []byte, mode fs.FileMode) (bool, error)
 }
 
 func readAsset(name string) ([]byte, error) {
-	content, err := runtimeAssets.ReadFile(name)
+	content, err := assets.Files.ReadFile(name)
 	if err != nil {
 		return nil, fmt.Errorf("读取内置资源 %s: %w", name, err)
 	}
@@ -90,7 +92,7 @@ func (a *app) bootstrap() error {
 		return err
 	}
 	for _, dir := range []string{
-		filepath.Dir(a.registryFile),
+		a.root,
 		a.envsDir,
 		a.stacksDir,
 	} {
@@ -116,7 +118,7 @@ func (a *app) bootstrap() error {
 		return err
 	}
 
-	createdSites, err := writeIfMissing(a.registryFile, sites, 0o644)
+	createdSites, err := writeIfMissing(a.sitesFile, sites, 0o644)
 	if err != nil {
 		return err
 	}
@@ -131,9 +133,9 @@ func (a *app) bootstrap() error {
 	}
 
 	if createdSites {
-		a.log("已创建 %s", a.registryFile)
+		a.log("已创建 %s", a.sitesFile)
 	} else {
-		a.log("保留已有 %s", a.registryFile)
+		a.log("保留已有 %s", a.sitesFile)
 	}
 	if createdEnv {
 		a.log("已创建 %s", envExample)
@@ -145,6 +147,6 @@ func (a *app) bootstrap() error {
 	} else {
 		a.log("保留已有 %s", a.runtimeConfig)
 	}
-	a.log("初始化目录完成；下一步只需编辑 registry/sites.yaml 和 envs/<slug>.env")
+	a.log("初始化目录完成；下一步只需编辑 sites.yaml 和 envs/<slug>.env")
 	return nil
 }

@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, strings.TrimSpace(`
-bgdeploy - single-host, multi-site blue-green deployment CLI
+bgdeploy - blue-green deployment CLI built specifically for sub2api
 
 Notes:
   The examples below assume that the executable is named bgdeploy. If it is
@@ -26,8 +26,8 @@ Global options must appear before the command. For example:
 Commands:
   bootstrap
       Create the deployment directory structure and example configuration
-      without overwriting existing files. Creates runtime.yaml,
-      registry/sites.yaml, env.example, envs/, and stacks/.
+      without overwriting existing files. Creates runtime.yaml, sites.yaml,
+      env.example, envs/, and stacks/.
 
   check
       Check root privileges, the Docker daemon, Docker Compose v2, Nginx,
@@ -35,7 +35,7 @@ Commands:
       loaded.
 
   render
-      Validate registry/sites.yaml and generate Compose files, Nginx sites,
+      Validate sites.yaml and generate Compose files, Nginx sites,
       upstreams, and the shared proxy snippet. Run nginx -t and reload Nginx.
       Existing upstream files are preserved. The HTTP/2 syntax is selected
       automatically for the installed Nginx version.
@@ -88,7 +88,7 @@ Global options:
       Default: /etc/nginx/sites/snippets
 
 runtime.yaml:
-  root: /srv/blue-green
+  root: /srv/sub2api
   nginx_dir: /etc/nginx/sites
   nginx_snippet_dir: /etc/nginx/sites/snippets
 
@@ -104,18 +104,18 @@ Configuration precedence:
 
 Deployment directory:
   runtime.yaml                Host-level path settings; normally edited once
-  registry/sites.yaml         Sites, images, ports, domains, TLS, and timeouts
+  sites.yaml                  Sites, images, ports, domains, TLS, and timeouts
   env.example                 Site environment template
   envs/<slug>.env             Site secrets; regular file with mode 0600
   stacks/<slug>/              Generated Compose files, STATE, and runtime data
 
 Files normally edited by an operator:
-  registry/sites.yaml
+  sites.yaml
   envs/<slug>.env
 
 Minimal sites.yaml example:
   defaults:
-    image_repo: ghcr.io/example/application
+    image_repo: weishaw/sub2api
     bind_host: 127.0.0.1
     drain_seconds: 960
     health_timeout_seconds: 300
@@ -160,10 +160,10 @@ One-time Nginx integration:
   They are loaded by the generated /etc/nginx/sites/http.conf file.
 
 First-time setup:
-  cd /srv/blue-green
+  cd /srv/sub2api
   sudo ./bgdeploy bootstrap
 
-  # Edit runtime.yaml, registry/sites.yaml, and envs/<slug>.env. Complete the
+  # Edit runtime.yaml, sites.yaml, and envs/<slug>.env. Complete the
   # one-time Nginx integration above, then run:
   sudo ./bgdeploy render
   sudo ./bgdeploy check
@@ -172,7 +172,7 @@ First-time setup:
   ./bgdeploy status api-staging
 
 Routine blue-green release:
-  cd /srv/blue-green
+  cd /srv/sub2api
   ./bgdeploy status api-staging
   sudo ./bgdeploy deploy api-staging 1.6.9
   ./bgdeploy status api-staging

@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"bytes"
@@ -210,7 +210,7 @@ func writeExecutable(t *testing.T, path, content string) {
 
 func (environment *testEnvironment) writeSites(t *testing.T, portBase int) {
 	t.Helper()
-	for _, dir := range []string{filepath.Join(environment.root, "registry"), environment.app.envsDir} {
+	for _, dir := range []string{environment.root, environment.app.envsDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -231,7 +231,7 @@ stacks:
       cert: %s
       key: %s
 `, portBase, environment.certFile, environment.keyFile)
-	if err := os.WriteFile(filepath.Join(environment.root, "registry", "sites.yaml"), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(environment.root, "sites.yaml"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -260,7 +260,7 @@ func TestBootstrapDoesNotOverwriteConfiguration(t *testing.T) {
 	if err := environment.app.bootstrap(); err != nil {
 		t.Fatal(err)
 	}
-	sitesPath := filepath.Join(environment.root, "registry", "sites.yaml")
+	sitesPath := filepath.Join(environment.root, "sites.yaml")
 	if err := os.WriteFile(sitesPath, []byte("custom: true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -283,6 +283,9 @@ func TestBootstrapDoesNotOverwriteConfiguration(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("bootstrap did not create %s: %v", path, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(environment.root, "registry")); !os.IsNotExist(err) {
+		t.Errorf("bootstrap created obsolete registry directory: %v", err)
 	}
 }
 
@@ -319,6 +322,9 @@ func TestCurrentDirectoryDefaults(t *testing.T) {
 	if configured.runtimeConfig != filepath.Join(currentDirectory, "runtime.yaml") {
 		t.Fatalf("runtimeConfig = %s", configured.runtimeConfig)
 	}
+	if configured.sitesFile != filepath.Join(currentDirectory, "sites.yaml") {
+		t.Fatalf("sitesFile = %s", configured.sitesFile)
+	}
 	if configured.nginxDir != "/etc/nginx/sites" {
 		t.Fatalf("nginxDir = %s", configured.nginxDir)
 	}
@@ -337,19 +343,20 @@ func TestHelpIncludesCompleteOperationsGuide(t *testing.T) {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			stdout := new(bytes.Buffer)
 			stderr := new(bytes.Buffer)
-			if err := runCLI(context.Background(), args, stdout, stderr); err != nil {
-				t.Fatalf("runCLI(%v): %v", args, err)
+			if err := Run(context.Background(), args, stdout, stderr); err != nil {
+				t.Fatalf("Run(%v): %v", args, err)
 			}
 			if stderr.Len() != 0 {
-				t.Fatalf("runCLI(%v) stderr = %q", args, stderr)
+				t.Fatalf("Run(%v) stderr = %q", args, stderr)
 			}
 			help := stdout.String()
 			for _, required := range []string{
+				"blue-green deployment CLI built specifically for sub2api",
 				"bgdeploy [global options] <command> [arguments]",
 				"bootstrap",
 				"deploy <slug> [image-tag]",
 				"teardown <slug> <blue|green>",
-				"registry/sites.yaml",
+				"sites.yaml",
 				"envs/<slug>.env",
 				"worker_shutdown_timeout 1200s;",
 				"First-time setup:",
@@ -358,13 +365,16 @@ func TestHelpIncludesCompleteOperationsGuide(t *testing.T) {
 				"command-line options > BGDEPLOY_* environment variables > runtime.yaml >",
 			} {
 				if !strings.Contains(help, required) {
-					t.Errorf("runCLI(%v) help missing %q", args, required)
+					t.Errorf("Run(%v) help missing %q", args, required)
 				}
 			}
 			for _, character := range help {
 				if unicode.Is(unicode.Han, character) {
-					t.Fatalf("runCLI(%v) help contains Chinese character %q", args, character)
+					t.Fatalf("Run(%v) help contains Chinese character %q", args, character)
 				}
+			}
+			if strings.Contains(help, "registry/") {
+				t.Fatalf("Run(%v) help contains obsolete registry directory", args)
 			}
 		})
 	}
