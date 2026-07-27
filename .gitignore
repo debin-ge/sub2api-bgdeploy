@@ -1,0 +1,8 @@
+/dist/
+/registry/
+/stacks/
+/envs/
+/runtime.yaml
+*.env
+!env.example
+.DS_Store

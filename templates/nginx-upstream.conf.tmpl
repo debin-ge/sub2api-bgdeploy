@@ -1,0 +1,7 @@
+# ${SLUG} —— 由 ./bgdeploy deploy 自动改写，请勿手工编辑
+# slot=${SLOT} tag=${IMAGE_TAG} at=${TIMESTAMP}
+upstream ${SLUG_US} {
+    server 127.0.0.1:${APP_PORT};
+    keepalive 64;
+    keepalive_timeout 120s;
+}

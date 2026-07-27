@@ -1,0 +1,7 @@
+# bgdeploy 主机级运行配置，不包含站点信息或密钥。
+# 配置优先级：命令行参数 > BGDEPLOY_* 环境变量 > 本文件 > 内置默认值。
+# bootstrap 会在当前工作目录创建 runtime.yaml；路径必须是绝对路径。
+
+root: ${DEPLOY_ROOT}
+nginx_dir: ${NGINX_DIR}
+nginx_snippet_dir: ${NGINX_SNIPPET_DIR}

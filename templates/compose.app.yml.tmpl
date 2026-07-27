@@ -1,0 +1,77 @@
+# 由 ./bgdeploy render 生成——请勿手工编辑
+# 同一份渲染产物由 ./bgdeploy deploy 以不同的 SLOT / APP_PORT / IMAGE_TAG 环境变量
+# 运行两次（blue / green），project 名由 -p ${SLUG}-<slot> 指定。
+#
+# 渲染期替换：${SLUG} ${IMAGE_REPO} ${BIND_HOST} ${DRAIN_SECONDS} ${TZ}
+# 运行期插值（./bgdeploy deploy 传入）：${SLOT} ${APP_PORT} ${IMAGE_TAG}
+# 运行期插值（stack .env 提供）：${POSTGRES_*} ${REDIS_PASSWORD} 等
+
+services:
+  app:
+    image: ${IMAGE_REPO}:${IMAGE_TAG:?IMAGE_TAG is required}
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    ports:
+      # 只绑定本机回环，禁止绕过 nginx 直连（FR-2.7）
+      - "${BIND_HOST}:${APP_PORT:?APP_PORT is required}:8080"
+    volumes:
+      # blue/green 必须共享同一份 data（config.yaml + .installed），
+      # 否则新 slot 会被识别为全新安装（FR-2.4）
+      - ./data:/app/data:Z
+    env_file:
+      - .env
+    environment:
+      - AUTO_SETUP=true
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      # 优雅关闭窗口与 stop_grace_period 绑定同一变量（FR-2.6）
+      - SERVER_SHUTDOWN_TIMEOUT_SECONDS=${DRAIN_SECONDS}
+      # /health 的 slot 字段来源，发布脚本据此校验实际运行的 slot
+      - APP_SLOT=${SLOT:?SLOT is required}
+      # 蓝绿并存窗口内禁止启动清理误清对端实例的活跃并发槽位
+      - GATEWAY_SCHEDULING_STARTUP_SLOT_CLEANUP_DISABLED=true
+      # 数据层走 stack 网络内 DNS（data project 的服务名）
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${POSTGRES_USER:-app}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - DATABASE_DBNAME=${POSTGRES_DB:-app}
+      - DATABASE_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - TZ=${TZ}
+    stop_grace_period: ${DRAIN_SECONDS}s
+    networks:
+      - stack
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-T",
+          "5",
+          "-O",
+          "/dev/null",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # 首次启动含 DB 迁移，可能远超常规启动时长；流量切换由
+      # ./bgdeploy deploy 的健康门禁把关，此处仅影响 docker 的健康展示
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+networks:
+  stack:
+    name: ${SLUG}-net
+    external: true

@@ -1,0 +1,87 @@
+# 由 ./bgdeploy render 生成——请勿手工编辑
+# 数据层常驻，不参与蓝绿轮换；发布过程中本文件的容器不重启。
+#
+# 渲染期替换：${SLUG} ${TZ}；其余 ${VAR} 保留给 docker compose 运行期从
+# 本目录 .env（软链至部署根目录 envs/<slug>.env）插值。
+name: ${SLUG}-data
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    command: >
+      postgres
+      -c max_connections=${POSTGRES_MAX_CONNECTIONS:-100}
+      -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-128MB}
+      -c effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-4GB}
+      -c maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-64MB}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data:Z
+    environment:
+      # postgres:18-alpine 默认 PGDATA 不在挂载卷内，必须显式指定，
+      # 否则 down/up 后触发 initdb 重新初始化导致数据丢失。
+      - PGDATA=/var/lib/postgresql/data
+      - POSTGRES_USER=${POSTGRES_USER:-app}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - POSTGRES_DB=${POSTGRES_DB:-app}
+      - TZ=${TZ}
+    networks:
+      - stack
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
+    volumes:
+      - ./redis_data:/data:Z
+    # 内层 sh -c 的引号内每行都需要行尾反斜杠，否则 redis-server 不带任何参数运行
+    command: >
+      sh -c '
+        redis-server \
+        --save 60 1 \
+        --appendonly yes \
+        --appendfsync everysec \
+        ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}'
+    environment:
+      - TZ=${TZ}
+      - REDISCLI_AUTH=${REDIS_PASSWORD:-}
+    networks:
+      - stack
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+networks:
+  stack:
+    name: ${SLUG}-net
+    external: true # 由 ./bgdeploy init 预先创建

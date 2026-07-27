@@ -1,0 +1,16 @@
+# blue-green-managed-http-config
+# 蓝绿部署的 nginx http 级公共配置。
+# 在 nginx.conf 的 http {} 内只需一次性添加：
+#   include ${NGINX_BG_DIR}/*.conf;
+#
+# 本文件由 ./bgdeploy render 管理，请勿手工编辑。
+
+# 同时兼容 WebSocket Upgrade 与普通 HTTP upstream keepalive：普通请求变量为空，
+# nginx 不会向 upstream 发送 Connection 头；WebSocket 请求则发送 upgrade。
+map $http_upgrade $bg_connection_upgrade {
+    default upgrade;
+    ''      "";
+}
+
+include ${NGINX_BG_DIR}/upstreams/*.conf;
+include ${NGINX_BG_DIR}/servers/*.conf;

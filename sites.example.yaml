@@ -1,0 +1,39 @@
+# 多站点蓝绿部署清单——所有站点配置的单一真相源。
+# 在目标部署目录执行 bootstrap；该目录由执行时的 pwd 决定。
+#
+# 端口分配规则（FR-5.6）：每个 stack 占用 port_base ~ port_base+9 共 10 个端口，
+#   blue = port_base，green = port_base+1，其余预留（调试用 pg/redis 暴露等）。
+#   ./bgdeploy render 会校验各 stack 的端口区间互不重叠。
+#
+# 密钥（POSTGRES_PASSWORD / JWT_SECRET / TOTP_ENCRYPTION_KEY / OAuth secret 等）
+# 一律不进本文件，放在 envs/<slug>.env（chmod 600）。
+
+defaults:
+  image_repo: registry.example.com/application
+  bind_host: 127.0.0.1 # 应用端口只绑回环，禁止绕过 nginx 直连
+  drain_seconds: 960 # 900（流上限）+ 60（余量）；与应用优雅关闭窗口绑定
+  health_timeout_seconds: 300 # 健康门禁总超时，需覆盖 DB 迁移时间（上限 10 分钟）
+  health_interval_seconds: 3
+  client_max_body_size: 32m
+  proxy_connect_timeout: 10s
+  proxy_send_timeout: 960s
+  proxy_read_timeout: 960s
+  tz: Asia/Shanghai
+
+stacks:
+  - slug: api-prod
+    domain: api.example.com
+    port_base: 18080 # blue=18080, green=18081
+    image_tag: v1.4.2
+    tls:
+      cert: /etc/letsencrypt/live/api.example.com/fullchain.pem
+      key: /etc/letsencrypt/live/api.example.com/privkey.pem
+
+  - slug: api-staging
+    domain: staging.example.com
+    port_base: 18090
+    image_tag: main
+    drain_seconds: 60 # 覆盖 defaults：staging 不需要长排空
+    tls:
+      cert: /etc/letsencrypt/live/staging.example.com/fullchain.pem
+      key: /etc/letsencrypt/live/staging.example.com/privkey.pem
