@@ -310,6 +310,8 @@ Redis、OAuth、安全白名单、更新代理和网关并发配置。蓝绿部�
 
 - `SERVER_SHUTDOWN_TIMEOUT_SECONDS` 固定使用站点的 `drain_seconds`；
 - `TZ` 使用 `sites.yaml` 中解析后的站点时区；
+- `DATA_DIR` 和 `CONFIG_FILE` 固定为 `/app/data` 与
+  `/app/data/config.yaml`，与共享数据卷的容器内挂载位置一致；
 - 额外注入 `APP_SLOT` 和
   `GATEWAY_SCHEDULING_STARTUP_SLOT_CLEANUP_DISABLED=true`；
 - 应用通过 `env_file` 继续接收 Sub2API 支持但上游 Compose 尚未显式列出的扩展参数。

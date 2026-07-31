@@ -29,6 +29,10 @@ services:
 
       # Auto Setup
       - AUTO_SETUP=true
+      # 宿主机 ./data 固定挂载到 /app/data。使用绝对路径，避免 env_file 中遗留的
+      # CONFIG_FILE=./config.yaml 被容器按 WORKDIR=/app 解析成 /app/config.yaml。
+      - DATA_DIR=/app/data
+      - CONFIG_FILE=/app/data/config.yaml
 
       # Server Configuration
       - SERVER_HOST=0.0.0.0

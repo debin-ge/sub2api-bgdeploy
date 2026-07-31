@@ -524,10 +524,12 @@ func TestRenderAndInitUseEmbeddedAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Keep this contract aligned with sub2api/deploy/docker-compose.yml. The
-	// rendered drain timeout/TZ and the two blue-green identity controls are
-	// intentional bgdeploy differences.
+	// rendered drain timeout/TZ, fixed shared-data paths, and the two blue-green
+	// identity controls are intentional bgdeploy differences.
 	expectedAppEnvironment := []string{
 		"AUTO_SETUP=true",
+		"DATA_DIR=/app/data",
+		"CONFIG_FILE=/app/data/config.yaml",
 		"SERVER_HOST=0.0.0.0",
 		"SERVER_PORT=8080",
 		"SERVER_MODE=${SERVER_MODE:-release}",
